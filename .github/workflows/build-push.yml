@@ -7,7 +7,7 @@ on:
   
 
 permissions:
-  id-token: write     # Needed for OIDC Login
+  id-token: write                    # Needed for OIDC Login
   contents: read
 
 jobs:
@@ -15,13 +15,13 @@ jobs:
     runs-on: ubuntu-latest
     
     env:
-      IMAGE_NAME: deletetask # Name of the Docker image
+      IMAGE_NAME: gettask               # Name of the Docker image
       IMAGE_TAG: ${{ github.sha }}
       ACR_NAME: anzacr1
       ACR_LOGIN_SERVER: anzacr1.azurecr.io
 
-    steps:
       # 1️. Checkout source code
+    steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
