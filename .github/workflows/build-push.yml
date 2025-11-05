@@ -1,45 +1,63 @@
-name: Build and Push to ACR
+name: Build, Scan and Push React App to ACR
 
 on:
-  workflow_dispatch:  # Isse tum manually GitHub se trigger kar sakte ho
+  push:
+    branches:
+      - main
+  
 
 permissions:
-  id-token: write
+  id-token: write     # Needed for OIDC Login
   contents: read
-  
+
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-
+    
     env:
-      IMAGE_NAME: todo-get-tasks-api
-      IMAGE_TAG: v1
-      ACR_NAME: acrdevtodoapp01
-      ACR_LOGIN_SERVER: acrdevtodoapp01.azurecr.io
+      IMAGE_NAME: deletetask # Name of the Docker image
+      IMAGE_TAG: ${{ github.sha }}
+      ACR_NAME: anzacr1
+      ACR_LOGIN_SERVER: anzacr1.azurecr.io
 
     steps:
+      # 1️. Checkout source code
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Azure Login
-        uses: Azure/login@v2.3.0
+      # 2 Login to Azure using OIDC
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
         with:
-          client-id: ff27bcf6-f60c-4a57-8b01-8eee5de2a9cd
-          tenant-id: 0f7010fd-209e-4344-8457-043ffb37143b
-          subscription-id: 1075ec7a-b17a-4f37-bf3f-9d68c4506dc1
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      # 3. Login to Azure Container Registry
       - name: Log in to ACR
-        run: |
-          az acr login --name $ACR_NAME
+        run: az acr login --name $ACR_NAME
 
+      # 4. Build Docker Image
       - name: Build Docker Image
-        run: |
-          docker build -t $IMAGE_NAME:$IMAGE_TAG .
+        run: docker build -t $IMAGE_NAME:$IMAGE_TAG .
 
-      - name: Tag Docker Image for ACR
+      # 5. Tag and Push Docker Image to ACR
+      - name: Tag and Push Docker Image
         run: |
           docker tag $IMAGE_NAME:$IMAGE_TAG $ACR_LOGIN_SERVER/$IMAGE_NAME:$IMAGE_TAG
-
-      - name: Push Docker Image to ACR
-        run: |
           docker push $ACR_LOGIN_SERVER/$IMAGE_NAME:$IMAGE_TAG
+
+      # 6. Security Scan using Trivy
+      - name: Scan Docker image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          vuln-type: 'os,library'
+          ignore-unfixed: true
+          exit-code: '0'   # '1' = fail build on vulns; '0' = continue build
+
+      # 7. Cleanup Docker space
+      - name: Clean up
+        run: docker system prune -af
